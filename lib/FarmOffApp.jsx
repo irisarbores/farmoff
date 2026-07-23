@@ -1,14 +1,5 @@
 'use client';
 
-// lib/FarmOffApp.jsx
-// プロトタイプで見た「予定・報告・チャット・マニュアル」の4タブを
-// Supabaseの実データに接続したバージョンです。
-//
-// 使い方の前提:
-// - 農家は最初にfarmsテーブルへ自分の農園を登録する（ここでは簡略化のため
-//   ログイン後に農園が1件もなければ自動で1件作成する処理を入れています）
-// - 代行者は farm_agents テーブルで農園に割り当てられている前提
-
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -16,26 +7,71 @@ import InviteTab from './InviteTab';
 import RecurringTab from './RecurringTab';
 import PayoutTab from './PayoutTab';
 
+// アップロードファイルの検証
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
+
+function validateImageFile(file) {
+  if (!file) return { ok: true };
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { ok: false, message: '対応していないファイル形式です（JPEG/PNG/WEBP/GIFのみ）' };
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return { ok: false, message: 'ファイルサイズが大きすぎます（8MBまで）' };
+  }
+  return { ok: true };
+}
+
+// 🔑 Privateバケット用ヘルパー関数：パスからSigned URL（有効期限付きURL）を取得
+// DBにフルURLが残っている場合の互換性も保持
+async function getSignedImageUrl(pathOrUrl, expiresInSeconds = 3600) {
+  if (!pathOrUrl) return null;
+
+  let filePath = pathOrUrl;
+  // 万が一フルURLが入っていた場合はパス部分を抽出
+  if (pathOrUrl.includes('/report-photos/')) {
+    filePath = pathOrUrl.split('/report-photos/')[1];
+  }
+
+  const { data, error } = await supabase.storage
+    .from('report-photos')
+    .createSignedUrl(filePath, expiresInSeconds);
+
+  if (error) {
+    console.error('Signed URLの取得に失敗しました:', error.message);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+// 🖼️ 渡された画像パスから動的に Signed URL を生成して表示する共通コンポーネント
+function PrivateImage({ path, alt, style }) {
+  const [signedUrl, setSignedUrl] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (path) {
+      getSignedImageUrl(path).then((url) => {
+        if (isMounted) setSignedUrl(url);
+      });
+    } else {
+      setSignedUrl(null);
+    }
+    return () => { isMounted = false; };
+  }, [path]);
+
+  if (!signedUrl) return null;
+  return <img src={signedUrl} alt={alt} style={style} loading="lazy" />;
+}
+
 // テーマカラー設定（緑ベース）
 const THEME = {
-  primary: '#2E7D32',      // メインの緑色
-  primaryHover: '#1B5E20', // ホバー・押下時の濃い緑
-  lightBg: '#E8F5E9',      // 薄い緑背景
-  border: '#A5D6A7',       // 緑系の枠線
-  textOnPrimary: '#FFFFFF' // 緑ボタンの上の文字色
+  primary: '#2E7D32',
+  primaryHover: '#1B5E20',
+  lightBg: '#E8F5E9',
+  border: '#A5D6A7',
+  textOnPrimary: '#FFFFFF'
 };
-
-// 適用例（ボタン部分）
-<button 
-  style={{ 
-    background: THEME.primary, 
-    color: THEME.buttonText, 
-    border: 'none', 
-    borderRadius: 4 
-  }}
->
-  送信
-</button>
 
 export default function FarmOffApp({ session }) {
   const [profile, setProfile] = useState(null);
@@ -50,7 +86,7 @@ export default function FarmOffApp({ session }) {
 
   const userId = session.user.id;
 
-  // 1. 自分のプロフィールを取得
+  // 1. プロフィール取得
   useEffect(() => {
     supabase
       .from('profiles')
@@ -60,53 +96,49 @@ export default function FarmOffApp({ session }) {
       .then(({ data }) => setProfile(data));
   }, [userId]);
 
-// 2. 関係する農園一覧を取得（一部変更）
-useEffect(() => {
-  if (!profile) return;
+  // 2. 関係する農園一覧の取得
+  useEffect(() => {
+    if (!profile) return;
 
-  async function loadFarms() {
-    const savedFarmId = localStorage.getItem('activeFarmId'); // ローカルストレージから取得
+    async function loadFarms() {
+      const savedFarmId = localStorage.getItem('activeFarmId');
 
-    if (profile.role === 'farmer') {
-      const { data } = await supabase.from('farms').select('*').eq('farmer_id', userId);
-      if (data && data.length === 0) {
-        // 初回作成処理（変更なし）
-        const { data: created } = await supabase
-          .from('farms')
-          .insert({ farmer_id: userId, name: `${profile.display_name}の農園` })
-          .select()
-          .single();
-        setFarms(created ? [created] : []);
-        setActiveFarmId(created?.id ?? null);
+      if (profile.role === 'farmer') {
+        const { data } = await supabase.from('farms').select('*').eq('farmer_id', userId);
+        if (data && data.length === 0) {
+          const { data: created } = await supabase
+            .from('farms')
+            .insert({ farmer_id: userId, name: `${profile.display_name}の農園` })
+            .select()
+            .single();
+          setFarms(created ? [created] : []);
+          setActiveFarmId(created?.id ?? null);
+        } else {
+          setFarms(data ?? []);
+          const defaultId = data?.find(f => f.id === savedFarmId)?.id ?? data?.[0]?.id ?? null;
+          setActiveFarmId(defaultId);
+        }
       } else {
-        setFarms(data ?? []);
-        // 保存されたIDが存在すればそれを、なければ1件目をセット
-        const defaultId = data?.find(f => f.id === savedFarmId)?.id ?? data?.[0]?.id ?? null;
+        const { data } = await supabase
+          .from('farm_agents')
+          .select('farm_id, farms(*)')
+          .eq('agent_id', userId);
+        const list = (data ?? []).map((row) => row.farms);
+        setFarms(list);
+        const defaultId = list?.find(f => f.id === savedFarmId)?.id ?? list?.[0]?.id ?? null;
         setActiveFarmId(defaultId);
       }
-    } else {
-      // 代行者側の処理
-      const { data } = await supabase
-        .from('farm_agents')
-        .select('farm_id, farms(*)')
-        .eq('agent_id', userId);
-      const list = (data ?? []).map((row) => row.farms);
-      setFarms(list);
-      const defaultId = list?.find(f => f.id === savedFarmId)?.id ?? list?.[0]?.id ?? null;
-      setActiveFarmId(defaultId);
     }
-  }
-  loadFarms();
-}, [profile, userId]);
+    loadFarms();
+  }, [profile, userId]);
 
-// 追加: activeFarmIdが変わるたびにlocalStorageに保存
-useEffect(() => {
-  if (activeFarmId) {
-    localStorage.setItem('activeFarmId', activeFarmId);
-  }
-}, [activeFarmId]);
+  useEffect(() => {
+    if (activeFarmId) {
+      localStorage.setItem('activeFarmId', activeFarmId);
+    }
+  }, [activeFarmId]);
 
-  // 3. 選択中の農園に紐づくデータを読み込み＋リアルタイム購読
+  // 3. データの読み込み ＋ チャットのリアルタイム購読
   useEffect(() => {
     if (!activeFarmId) return;
 
@@ -124,7 +156,6 @@ useEffect(() => {
     }
     loadAll();
 
-    // チャットだけリアルタイム反映（相手の発言をすぐ表示するため）
     const channel = supabase
       .channel(`messages-${activeFarmId}`)
       .on(
@@ -137,7 +168,7 @@ useEffect(() => {
     return () => supabase.removeChannel(channel);
   }, [activeFarmId]);
 
-  // ---- 予定の追加・編集・削除 ----
+  // ---- 予定 ----
   async function addSchedule() {
     const { data, error } = await supabase
       .from('schedules')
@@ -145,17 +176,12 @@ useEffect(() => {
       .select()
       .single();
       
-    // エラー時はログを出して処理を中断する
     if (error) {
       console.error('予定の追加に失敗しました:', error.message);
       alert('予定の追加に失敗しました。テーブルが存在しないか、権限がありません。');
       return;
     }
-    
-    // 成功時のみ配列に追加
-    if (data) {
-      setSchedules((prev) => [...prev, data]);
-    }
+    if (data) setSchedules((prev) => [...prev, data]);
   }
   async function updateSchedule(id, fields) {
     await supabase.from('schedules').update(fields).eq('id', id);
@@ -166,26 +192,30 @@ useEffect(() => {
     setSchedules((prev) => prev.filter((s) => s.id !== id));
   }
 
-  // ---- 報告の送信（写真アップロード込み）----
+  // ---- 報告の送信（DBには相対パスを保存） ----
   async function submitReport(note, isOk, file) {
-    let photoUrl = null;
+    let photoPath = null;
     if (file) {
-      const path = `${activeFarmId}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('report-photos').upload(path, file);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('report-photos').getPublicUrl(path);
-        photoUrl = data.publicUrl;
+      const check = validateImageFile(file);
+      if (!check.ok) {
+        alert(check.message);
+        return;
+      }
+      photoPath = `${activeFarmId}/${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('report-photos').upload(photoPath, file);
+      if (uploadError) {
+        console.error('アップロード失敗:', uploadError.message);
+        photoPath = null;
       }
     }
     const { data } = await supabase
       .from('reports')
-      .insert({ farm_id: activeFarmId, agent_id: userId, note, is_ok: isOk, photo_url: photoUrl })
+      .insert({ farm_id: activeFarmId, agent_id: userId, note, is_ok: isOk, photo_url: photoPath })
       .select()
       .single();
-    setReports((prev) => [data, ...prev]);
+    if (data) setReports((prev) => [data, ...prev]);
   }
 
-// ---- 報告の削除申請 ----
   async function requestDeleteReport(id, reason) {
     await supabase.from('reports').update({ delete_requested: true, delete_reason: reason }).eq('id', id);
     setReports((prev) =>
@@ -193,7 +223,6 @@ useEffect(() => {
     );
   }
 
-// ---- 報告の承認・差し戻し ----
   async function approveReport(id, newStatus) {
     await supabase.from('reports').update({ status: newStatus }).eq('id', id);
     setReports((prev) =>
@@ -201,35 +230,39 @@ useEffect(() => {
     );
   }
 
-  // ---- 共通の画像アップロード関数 ----
+  // ---- 共通アップロード（DBには相対パスを保存） ----
   async function uploadImage(file, folder) {
     if (!file) return null;
+    const check = validateImageFile(file);
+    if (!check.ok) {
+      alert(check.message);
+      return null;
+    }
     const path = `${activeFarmId}/${folder}/${Date.now()}_${file.name}`;
     const { error } = await supabase.storage.from('report-photos').upload(path, file);
     if (error) {
       console.error('画像アップロード失敗:', error.message);
       return null;
     }
-    const { data } = supabase.storage.from('report-photos').getPublicUrl(path);
-    return data.publicUrl;
+    return path;
   }
 
   // ---- チャット送信 ----
   async function sendMessage(body, file) {
-    let imageUrl = null;
+    let imagePath = null;
     if (file) {
-      imageUrl = await uploadImage(file, 'chat');
+      imagePath = await uploadImage(file, 'chat');
     }
     await supabase.from('messages').insert({
       farm_id: activeFarmId,
       sender_id: userId,
       body: body || '',
-      image_url: imageUrl,
+      image_url: imagePath,
     });
   }
 
-  // ---- マニュアルの追加・編集・削除 ----
-async function addManual() {
+  // ---- マニュアル ----
+  async function addManual() {
     const { data } = await supabase
       .from('manuals')
       .insert({ farm_id: activeFarmId, title: '新しいマニュアル', body: '' })
@@ -241,8 +274,8 @@ async function addManual() {
   async function updateManual(id, fields, file) {
     let updatedFields = { ...fields };
     if (file) {
-      const imageUrl = await uploadImage(file, 'manuals');
-      if (imageUrl) updatedFields.image_url = imageUrl;
+      const imagePath = await uploadImage(file, 'manuals');
+      if (imagePath) updatedFields.image_url = imagePath;
     }
     await supabase.from('manuals').update(updatedFields).eq('id', id);
     setManuals((prev) => prev.map((m) => (m.id === id ? { ...m, ...updatedFields } : m)));
@@ -253,12 +286,10 @@ async function addManual() {
     setManuals((prev) => prev.filter((m) => m.id !== id));
   }
   
-if (!profile) return <p>読み込み中…</p>;
+  if (!profile) return <p>読み込み中…</p>;
 
   return (
     <div style={{ maxWidth: 420, margin: '0 auto', fontFamily: 'sans-serif' }}>
-      
-      {/* 👑 運営管理者（admin）でログインしている場合専用の画面を表示 */}
       {profile.role === 'admin' ? (
         <div style={{ padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: 12, marginBottom: 16 }}>
@@ -268,7 +299,6 @@ if (!profile) return <p>読み込み中…</p>;
           <AdminTab />
         </div>
       ) : (
-        /* 👇 ここから下が通常の農家・代行者用画面 */
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 4px' }}>
             <strong>{profile.display_name}さん（{profile.role === 'farmer' ? '農家' : '代理管理者'}）</strong>
@@ -288,21 +318,21 @@ if (!profile) return <p>読み込み中…</p>;
               .filter((t) => t !== 'payout' || profile.role !== 'farmer')
               .map((t) => (
               <button
-  key={t}
-  onClick={() => setTab(t)}
-  style={{
-    flex: 1,
-    padding: 10,
-    borderBottom: tab === t ? `3px solid ${THEME.primary}` : '3px solid transparent',
-    color: tab === t ? THEME.primary : '#666',
-    fontWeight: tab === t ? 'bold' : 'normal',
-    background: 'none',
-    borderTop: 'none',
-    borderLeft: 'none',
-    borderRight: 'none',
-    cursor: 'pointer'
-  }}
->
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  borderBottom: tab === t ? `3px solid ${THEME.primary}` : '3px solid transparent',
+                  color: tab === t ? THEME.primary : '#666',
+                  fontWeight: tab === t ? 'bold' : 'normal',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer'
+                }}
+              >
                 {{
                   schedule: '予定',
                   report: '報告',
@@ -336,27 +366,33 @@ if (!profile) return <p>読み込み中…</p>;
               onJoined={(farmId) => setActiveFarmId(farmId)}
             />
           )}
-
           {tab === 'recurring' && (
-            <RecurringTab farmId={activeFarmId} />
+            <RecurringTab 
+              farmId={activeFarmId} 
+              onSaved={async () => {
+                const { data } = await supabase
+                  .from('schedules')
+                  .select('*')
+                  .eq('farm_id', activeFarmId)
+                  .order('visit_date');
+                setSchedules(data ?? []);
+              }} 
+            />
           )}
-
           {tab === 'payout' && profile.role !== 'farmer' && (
             <PayoutTab profile={profile} />
           )}
-
           {tab === 'manual' && (
-  <ManualTab
-    profile={profile}
-    manuals={manuals}
-    onAdd={addManual}
-    onUpdate={updateManual}
-    onDelete={deleteManual}
-  />
-)}
+            <ManualTab
+              profile={profile}
+              manuals={manuals}
+              onAdd={addManual}
+              onUpdate={updateManual}
+              onDelete={deleteManual}
+            />
+          )}
         </>
       )}
-
     </div>
   );
 }
@@ -372,42 +408,51 @@ function ScheduleTab({ schedules, onAdd, onUpdate, onDelete }) {
   );
 }
 
-// 1件ごとのコンポーネントに分離
 function ScheduleItem({ schedule, onUpdate, onDelete }) {
   const [task, setTask] = useState(schedule.task ?? '');
   const [visitDate, setVisitDate] = useState(schedule.visit_date ?? '');
+  const [visitTime, setVisitTime] = useState(schedule.visit_time ?? '09:00');
 
   return (
-    <div style={{ border: '1px solid #ddd', padding: 8, marginTop: 8 }}>
-      <input
-        type="date"
-        value={visitDate}
-        onChange={(e) => setVisitDate(e.target.value)}
-        onBlur={() => onUpdate(schedule.id, { visit_date: visitDate })}
-      />
+    <div style={{ border: '1px solid #ddd', padding: 8, marginTop: 8, borderRadius: 4 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+        <input
+          type="date"
+          value={visitDate}
+          onChange={(e) => setVisitDate(e.target.value)}
+          onBlur={() => onUpdate(schedule.id, { visit_date: visitDate })}
+          style={{ flex: 1 }}
+        />
+        <input
+          type="time"
+          value={visitTime}
+          onChange={(e) => setVisitTime(e.target.value)}
+          onBlur={() => onUpdate(schedule.id, { visit_time: visitTime })}
+          style={{ width: 100 }}
+        />
+      </div>
+
       <input
         type="text"
         value={task}
         onChange={(e) => setTask(e.target.value)}
-        onBlur={() => onUpdate(schedule.id, { task })} // フォーカスが外れた時に保存
-        style={{ width: '100%', marginTop: 4 }}
+        onBlur={() => onUpdate(schedule.id, { task })}
+        style={{ width: '100%', boxSizing: 'border-box' }}
       />
-      <button onClick={() => onDelete(schedule.id)} style={{ marginTop: 4 }}>削除</button>
+      <button onClick={() => onDelete(schedule.id)} style={{ marginTop: 6, color: '#d32f2f' }}>
+        削除
+      </button>
     </div>
   );
 }
 
-// 1. 引数を追加する
 function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
-
-// 2. 下の方にある {reports.map((r) => ( ... ))} の中身の最後にボタンを追加する
   const [note, setNote] = useState('');
-  const [isOk, setIsOk] = useState(true);
+  const [hasIssue, setHasIssue] = useState(false); 
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // ファイルが選ばれたらプレビュー画像を作る
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0] ?? null;
     setFile(selected);
@@ -420,8 +465,9 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    await onSubmit(note || '作業完了', isOk, file);
+    await onSubmit(note || (hasIssue ? '異常発生の報告' : '作業完了'), !hasIssue, file);
     setNote('');
+    setHasIssue(false);
     setFile(null);
     setPreviewUrl(null);
     setSubmitting(false);
@@ -429,7 +475,6 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
 
   return (
     <div style={{ padding: 12 }}>
-      {/* 代行者アカウントのみ報告フォームを表示 */}
       {profile?.role !== 'farmer' && (
         <div style={{ marginBottom: 24 }}>
           <textarea
@@ -439,11 +484,14 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
             style={{ width: '100%', height: 70, padding: 8, boxSizing: 'border-box' }}
           />
 
-          <label style={{ display: 'block', margin: '8px 0', cursor: 'pointer' }}>
-            <input type="checkbox" checked={isOk} onChange={(e) => setIsOk(e.target.checked)} /> 異常なし
+          <label style={{ display: 'block', margin: '8px 0', cursor: 'pointer', color: hasIssue ? '#d32f2f' : '#333', fontWeight: hasIssue ? 'bold' : 'normal' }}>
+            <input 
+              type="checkbox" 
+              checked={hasIssue} 
+              onChange={(e) => setHasIssue(e.target.checked)} 
+            /> ⚠️ 異常あり（病害虫・設備破損など）
           </label>
 
-          {/* 分かりやすいファイル選択エリア */}
           <div style={{ marginBottom: 12 }}>
             <label
               style={{
@@ -461,13 +509,12 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
-                style={{ display: 'none' }} // 元の不格好なボタンは隠す
+                style={{ display: 'none' }}
               />
             </label>
             {file && <span style={{ marginLeft: 8, fontSize: 12, color: '#666' }}>{file.name}</span>}
           </div>
 
-          {/* 選択した写真のプレビュー表示 */}
           {previewUrl && (
             <div style={{ marginBottom: 12 }}>
               <img src={previewUrl} alt="プレビュー" style={{ width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 4 }} />
@@ -475,25 +522,25 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
           )}
 
           <button
-  onClick={handleSubmit}
-  disabled={submitting}
-  style={{
-    width: '100%',
-    padding: 10,
-    background: submitting ? '#ccc' : THEME.primary, // 既存の #0070f3 を変更
-    color: THEME.textOnPrimary,
-    border: 'none',
-    borderRadius: 4,
-    fontWeight: 'bold',
-    cursor: submitting ? 'not-allowed' : 'pointer',
-  }}
->
-  {submitting ? '送信中…' : '報告を送信'}
-</button>
+            onClick={handleSubmit}
+            disabled={submitting}
+            style={{
+              width: '100%',
+              padding: 10,
+              background: submitting ? '#ccc' : THEME.primary,
+              color: THEME.textOnPrimary,
+              border: 'none',
+              borderRadius: 4,
+              fontWeight: 'bold',
+              cursor: submitting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {submitting ? '送信中…' : '報告を送信'}
+          </button>
         </div>
       )}
 
-    <h4 style={{ marginTop: profile?.role !== 'farmer' ? 20 : 0, borderBottom: '1px solid #eee', paddingBottom: 4 }}>
+      <h4 style={{ marginTop: profile?.role !== 'farmer' ? 20 : 0, borderBottom: '1px solid #eee', paddingBottom: 4 }}>
         送信済みの報告
       </h4>
       {reports.map((r) => (
@@ -503,7 +550,6 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
               {new Date(r.created_at).toLocaleString('ja-JP')}
             </div>
             
-            {/* ステータスバッジの表示 */}
             <div style={{ 
               fontSize: 11, 
               padding: '2px 6px', 
@@ -518,16 +564,16 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
           <div style={{ margin: '8px 0', fontWeight: r.is_ok ? 'normal' : 'bold', color: r.is_ok ? '#333' : '#d32f2f' }}>
             {r.note} {!r.is_ok && '⚠️要確認'}
           </div>
+
+          {/* 🔑 PrivateImage コンポーネントで画像の安全な参照表示 */}
           {r.photo_url && (
-           <img 
-  src={r.photo_url} 
-  alt="現場写真" 
-  loading="lazy" 
-  style={{ width: '100%', maxHeight: 200, objectFit: 'cover' }} 
-/>
+            <PrivateImage 
+              path={r.photo_url} 
+              alt="現場写真" 
+              style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 4 }} 
+            />
           )}
 
-          {/* 農家アカウントで、かつステータスが「承認待ち」の時だけボタンを表示 */}
           {profile?.role === 'farmer' && (!r.status || r.status === 'pending') && (
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button 
@@ -545,38 +591,34 @@ function ReportTab({ reports, onSubmit, profile, onApprove, onRequestDelete }) {
             </div>
           )}
 
-        
-
-         {/* 削除申請ボタンエリア */}
-<div style={{ marginTop: 12, borderTop: '1px dashed #eee', paddingTop: 8 }}>
-  {!r.delete_requested ? (
-    <button
-      onClick={() => {
-        const isConfirmed = window.confirm('本当に削除申請を行いますか？');
-        if (isConfirmed) {
-          const reason = window.prompt('削除申請の理由を入力してください（運営が確認します）:');
-          if (reason) onRequestDelete(r.id, reason);
-        }
-      }}
-      style={{
-        padding: '6px 12px',
-        fontSize: 12,
-        background: '#fff',
-        color: '#666',
-        border: '1px solid #ccc',
-        borderRadius: 4,
-        cursor: 'pointer'
-      }}
-    >
-      🗑️ 削除を申請する
-    </button>
-  ) : (
-    <span style={{ fontSize: 12, color: '#d32f2f', fontWeight: 'bold' }}>
-      ⏳ 運営へ削除申請中...
-    </span>
-  )}
-</div> 
-
+          <div style={{ marginTop: 12, borderTop: '1px dashed #eee', paddingTop: 8 }}>
+            {!r.delete_requested ? (
+              <button
+                onClick={() => {
+                  const isConfirmed = window.confirm('本当に削除申請を行いますか？');
+                  if (isConfirmed) {
+                    const reason = window.prompt('削除申請の理由を入力してください（運営が確認します）:');
+                    if (reason) onRequestDelete(r.id, reason);
+                  }
+                }}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  background: '#fff',
+                  color: '#666',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  cursor: 'pointer'
+                }}
+              >
+                🗑️ 削除を申請する
+              </button>
+            ) : (
+              <span style={{ fontSize: 12, color: '#d32f2f', fontWeight: 'bold' }}>
+                ⏳ 運営へ削除申請中...
+              </span>
+            )}
+          </div> 
         </div>
       ))}
     </div>
@@ -607,7 +649,6 @@ function ChatTab({ messages, userId, onSend }) {
 
   return (
     <div style={{ padding: 12 }}>
-      {/* メッセージ一覧 */}
       <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 12 }}>
         {messages.map((m) => {
           const isMe = m.sender_id === userId;
@@ -624,9 +665,10 @@ function ChatTab({ messages, userId, onSend }) {
                   textAlign: 'left',
                 }}
               >
+                {/* 🔑 PrivateImage コンポーネントで画像の安全な参照表示 */}
                 {m.image_url && (
-                  <img
-                    src={m.image_url}
+                  <PrivateImage
+                    path={m.image_url}
                     alt="添付画像"
                     style={{ width: '100%', borderRadius: 8, marginBottom: m.body ? 4 : 0, display: 'block' }}
                   />
@@ -638,7 +680,6 @@ function ChatTab({ messages, userId, onSend }) {
         })}
       </div>
 
-      {/* プレビュー表示 */}
       {previewUrl && (
         <div style={{ position: 'relative', marginBottom: 8, display: 'inline-block' }}>
           <img src={previewUrl} alt="プレビュー" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6 }} />
@@ -651,7 +692,6 @@ function ChatTab({ messages, userId, onSend }) {
         </div>
       )}
 
-      {/* 入力欄 & 写真ボタン */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <label style={{ background: '#f0f0f0', border: '1px solid #ccc', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 16 }}>
           📷
@@ -675,7 +715,6 @@ function ChatTab({ messages, userId, onSend }) {
 function ManualTab({ profile, manuals, onAdd, onUpdate, onDelete }) {
   return (
     <div style={{ padding: 12 }}>
-      {/* 農家のみ追加ボタンを表示 */}
       {profile?.role === 'farmer' && (
         <button onClick={onAdd}>＋ マニュアルを追加</button>
       )}
@@ -689,7 +728,6 @@ function ManualTab({ profile, manuals, onAdd, onUpdate, onDelete }) {
 function ManualItem({ manual, onUpdate, onDelete, profile }) {
   const [title, setTitle] = useState(manual.title ?? '');
   const [body, setBody] = useState(manual.body ?? '');
-  const [imageUrl, setImageUrl] = useState(manual.image_url ?? null);
   const [uploading, setUploading] = useState(false);
 
   const handleImageUpload = async (e) => {
@@ -707,25 +745,28 @@ function ManualItem({ manual, onUpdate, onDelete, profile }) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => onUpdate(manual.id, { title, body })}
-        disabled={profile?.role !== 'farmer'} // 代行者は編集不可に
+        disabled={profile?.role !== 'farmer'}
         style={{ width: '100%', fontWeight: 'bold', padding: 4, boxSizing: 'border-box' }}
       />
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onBlur={() => onUpdate(manual.id, { title, body })}
-        disabled={profile?.role !== 'farmer'} // 代行者は編集不可に
+        disabled={profile?.role !== 'farmer'}
         rows={3}
         style={{ width: '100%', marginTop: 4, padding: 4, boxSizing: 'border-box' }}
       />
 
-      {/* 画像の表示 */}
+      {/* 🔑 PrivateImage コンポーネントで画像の安全な参照表示 */}
       {manual.image_url && (
-        <img src={manual.image_url} alt="マニュアル画像" style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 4, marginTop: 4 }} />
+        <PrivateImage 
+          path={manual.image_url} 
+          alt="マニュアル画像" 
+          style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 4, marginTop: 4 }} 
+        />
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        {/* 農家のみアップロードと削除を表示 */}
         {profile?.role === 'farmer' && (
           <>
             <label style={{ fontSize: 12, background: '#f0f0f0', border: '1px solid #ccc', padding: '4px 8px', borderRadius: 4, cursor: 'pointer' }}>
@@ -740,7 +781,6 @@ function ManualItem({ manual, onUpdate, onDelete, profile }) {
   );
 }
 
-// 運営管理者用のタブコンポーネント
 function AdminTab() {
   const [requests, setRequests] = useState([]);
 
@@ -799,29 +839,27 @@ function AdminTab() {
         </div>
       ))}
 
-      {/* カスタマーサポートボタン */}
-  <a
-    href="https://forms.gle/your-google-form-link" // 実際のフォーム等のURL
-    target="_blank"
-    rel="noopener noreferrer"
-    style={{
-      position: 'fixed',
-      bottom: 24,
-      right: 24,
-      background: '#333',
-      color: '#fff',
-      padding: '12px 16px',
-      borderRadius: 30,
-      textDecoration: 'none',
-      fontSize: 14,
-      fontWeight: 'bold',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-      zIndex: 1000,
-    }}
-  >
-    💬 お問い合わせ
-  </a>
-
+      <a
+        href="https://forms.gle/your-google-form-link"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: '#333',
+          color: '#fff',
+          padding: '12px 16px',
+          borderRadius: 30,
+          textDecoration: 'none',
+          fontSize: 14,
+          fontWeight: 'bold',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+        }}
+      >
+        💬 お問い合わせ
+      </a>
     </div>
   );
 }

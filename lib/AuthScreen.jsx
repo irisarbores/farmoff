@@ -6,6 +6,10 @@ import { supabase } from './supabaseClient';
 
 export default function AuthScreen({ onLoggedIn }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  // ★ role はUIでは 'farmer'/'agent' の2択のみだが、これはあくまで見た目の制限。
+  //   実際の防御は security_hardening.sql の profiles_insert_self ポリシーで
+  //   role in ('farmer','agent') 以外のINSERTをDB側で拒否している。
+  //   （ここだけ直しても、API直叩きでadmin登録されるのは防げないため）
   const [role, setRole] = useState('farmer'); // 'farmer' | 'agent'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

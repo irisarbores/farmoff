@@ -17,8 +17,14 @@ export default function App() {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      // ログアウト時は前ユーザーの選択農園IDを消す
+      // （共有端末で別アカウントに切り替わった際に、前の人が見ていた
+      //   farmIdが引き継がれてしまうのを防ぐ）
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('activeFarmId');
+      }
     });
 
     return () => listener.subscription.unsubscribe();

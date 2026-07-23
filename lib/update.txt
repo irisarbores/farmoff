@@ -1,0 +1,3 @@
+git add .
+git commit -m "セキュリティ対策とStorageのPrivate化対応"
+git push

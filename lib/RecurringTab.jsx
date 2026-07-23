@@ -8,7 +8,8 @@ import { supabase } from './supabaseClient';
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-export default function RecurringTab({ farmId }) {
+// コンポーネントの定義部分に onSaved を追加
+export default function RecurringTab({ farmId, onSaved }) {
   const [rules, setRules] = useState([]);
   const [selectedDays, setSelectedDays] = useState([]);
   const [time, setTime] = useState('09:00');
@@ -53,27 +54,44 @@ export default function RecurringTab({ farmId }) {
     if (selectedDays.length === 0) return;
     setSaving(true);
 
-    const { data: rule, error } = await supabase
+    // 1. ルールの保存
+    const { data: rule, error: ruleError } = await supabase
       .from('recurring_rules')
       .insert({ farm_id: farmId, weekdays: selectedDays, visit_time: time, task })
       .select()
       .single();
 
-    if (!error && rule) {
-      // 向こう4週間分の予定を自動生成
+    if (ruleError) {
+      console.error('繰り返しルールの保存エラー:', ruleError.message);
+      alert('ルールの保存に失敗しました: ' + ruleError.message);
+      setSaving(false);
+      return;
+    }
+
+    // 2. 予定の自動生成
+    if (rule) {
       const dates = generateNext4Weeks(selectedDays);
 
-const inserts = dates.map(date => ({
-  farm_id: farmId,
-  date,
-  task,
-  status: 'pending'
-}));
+      const inserts = dates.map(d => ({
+        farm_id: farmId,
+        visit_date: d,
+        visit_time: time, // ★設定した時間を予定に引き継ぐ
+        task,
+      }));
 
-await supabase.from('schedules').insert(inserts);
-      setSelectedDays([]);
-      setTask('水やり・見回り');
-      loadRules();
+      const { error: scheduleError } = await supabase.from('schedules').insert(inserts);
+
+      if (scheduleError) {
+        console.error('予定の自動生成エラー:', scheduleError.message);
+        alert('予定の生成に失敗しました: ' + scheduleError.message);
+      } else {
+        // 成功時の処理
+        setSelectedDays([]);
+        setTask('水やり・見回り');
+        loadRules();
+        if (onSaved) onSaved();
+        alert('繰り返し予定を登録し、4週間分の予定を生成しました！');
+      }
     }
     setSaving(false);
   }
@@ -116,9 +134,23 @@ await supabase.from('schedules').insert(inserts);
         />
       </div>
 
-      <button onClick={handleSave} disabled={saving || selectedDays.length === 0} style={{ width: '100%' }}>
-        {saving ? '保存中…' : 'この繰り返し予定を保存する（向こう4週間分を自動作成）'}
-      </button>
+      <button
+  onClick={handleSave}
+  disabled={saving || selectedDays.length === 0}
+  style={{
+    width: '100%',
+    padding: '12px 8px',
+    border: '2px solid #2E7D32',     // 緑枠
+    borderRadius: 6,
+    background: saving || selectedDays.length === 0 ? '#f5f5f5' : '#E8F5E9', // 選択時は明るい緑背景
+    color: saving || selectedDays.length === 0 ? '#999' : '#2E7D32',         // 緑文字
+    fontWeight: 'bold',
+    fontSize: 13,
+    cursor: saving || selectedDays.length === 0 ? 'not-allowed' : 'pointer',
+  }}
+>
+  {saving ? '保存中…' : 'この繰り返し予定を保存する（向こう4週間分を自動作成）'}
+</button>
 
       <div style={{ fontSize: 13, fontWeight: 500, margin: '20px 0 8px' }}>設定済みの繰り返し予定</div>
       {rules.length === 0 && <p style={{ fontSize: 13, color: '#999' }}>まだありません</p>}
