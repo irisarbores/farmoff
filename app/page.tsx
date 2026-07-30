@@ -1,114 +1,60 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import FarmOffApp from '../../lib/FarmOffApp'; // 階層が変わった場合はパスを調整
-import { supabase } from '../../lib/supabaseClient';
+import React from 'react';
 
-export default function AppPage() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+const THEME = {
+  primary: '#2E7D32',
+  primaryHover: '#1B5E20',
+  lightBg: '#F8FAF8',
+  cardBg: '#FFFFFF',
+  border: '#E2E8F0',
+  textMain: '#1E293B',
+  textSub: '#64748B',
+  textOnPrimary: '#FFFFFF',
+  accent: '#F59E0B'
+};
 
-  useEffect(() => {
-    // 1. 初回マウント時に現在のセッションを取得
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    // 2. ログイン・ログアウトなどの状態変化を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // 読み込み中
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>認証情報を確認中...</div>;
-  }
-
-  // セッションがない（未ログイン）場合はログインフォームを表示
-  if (!session) {
-    return (
-      <div style={{ padding: '40px 20px', maxWidth: 400, margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <h2 style={{ textAlign: 'center', color: '#2E7D32', marginBottom: 24 }}>FarmOffにログイン</h2>
-        <LoginForm />
-      </div>
-    );
-  }
-
-  // セッションがある場合はアプリ本体を表示
-  return <FarmOffApp session={session} />;
-}
-
-// 簡易的なログイン・新規登録フォーム
-function LoginForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true); // true: ログイン, false: 新規登録
-  const [message, setMessage] = useState('');
-
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setMessage('処理中...');
-    
-    let error;
-    if (isLogin) {
-      // ログイン処理
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      error = signInError;
-    } else {
-      // 新規登録処理
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
-      error = signUpError;
-      if (!signUpError) {
-        setMessage('確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。');
-        return;
-      }
-    }
-
-    if (error) {
-      setMessage(`エラー: ${error.message}`);
-    } else if (isLogin) {
-      setMessage('ログインしました。');
-    }
-  };
-
+export default function FarmerLP() {
   return (
-    <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <input
-        type="email"
-        placeholder="メールアドレス"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 16 }}
-      />
-      <input
-        type="password"
-        placeholder="パスワード"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 16 }}
-      />
-      <button 
-        type="submit" 
-        style={{ padding: 14, background: '#2E7D32', color: '#FFF', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}
-      >
-        {isLogin ? 'ログイン' : '新規登録'}
-      </button>
+    <div style={{ fontFamily: 'sans-serif', color: THEME.textMain, backgroundColor: THEME.lightBg, minHeight: '100vh' }}>
       
-      <button 
-        type="button" 
-        onClick={() => { setIsLogin(!isLogin); setMessage(''); }} 
-        style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', textDecoration: 'underline' }}
-      >
-        {isLogin ? 'アカウントをお持ちでない方は新規登録' : 'すでにアカウントをお持ちの方はログイン'}
-      </button>
+      {/* ヘッダー */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', backgroundColor: THEME.cardBg, borderBottom: `1px solid ${THEME.border}` }}>
+        <div style={{ fontSize: 24, fontWeight: 'bold', color: THEME.primary }}>
+          FarmOff
+        </div>
+        <nav>
+          <a 
+            href="/app" 
+            style={{ 
+              background: THEME.primary, 
+              color: THEME.textOnPrimary, 
+              padding: '10px 20px', 
+              borderRadius: 8, 
+              textDecoration: 'none', 
+              fontWeight: 'bold'
+            }}
+          >
+            ログイン
+          </a>
+        </nav>
+      </header>
 
-      {message && <p style={{ color: '#DC2626', fontSize: 14, textAlign: 'center' }}>{message}</p>}
-    </form>
+      {/* ヒーローセクション */}
+      <section style={{ textAlign: 'center', padding: '80px 20px', backgroundColor: '#E8F5E9' }}>
+        <h1 style={{ fontSize: 36, marginBottom: 16, color: THEME.primary, fontWeight: 'bold' }}>
+          農作業の一部を、安心して学生に任せませんか？
+        </h1>
+        <p style={{ fontSize: 18, color: THEME.textSub, marginBottom: 32, maxWidth: 700, margin: '0 auto 32px auto', lineHeight: 1.6 }}>
+          FarmOffは、人手不足に悩む農家さんと、意欲ある大学生（代理管理者）をつなぐ管理ツールです。
+          スケジュール共有、マニュアル化、現場の写真報告まで、遠隔でも作業をしっかり管理できます。
+        </p>
+      </section>
+
+      {/* 簡略化のため中略していますが、お手元の元のLPコードを貼り付けてください */}
+      <footer style={{ backgroundColor: THEME.textMain, color: '#FFF', textAlign: 'center', padding: '24px' }}>
+        <p style={{ fontSize: 14 }}>&copy; 2026 FarmOff. All rights reserved.</p>
+      </footer>
+    </div>
   );
 }
