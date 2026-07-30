@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import Link from 'next/link'; // ★ Linkをインポート
+import React, { useState } from 'react';
+import Link from 'next/link';
 
 const THEME = {
   primary: '#2E7D32',
@@ -16,6 +16,9 @@ const THEME = {
 };
 
 export default function FarmerLP() {
+  // どちらのプランが選ばれているかを管理（初期値は 'monthly'）
+  const [selectedPlan, setSelectedPlan] = useState('monthly');
+
   return (
     <div style={{ fontFamily: 'sans-serif', color: THEME.textMain, backgroundColor: THEME.lightBg, minHeight: '100vh' }}>
       
@@ -25,7 +28,6 @@ export default function FarmerLP() {
           FarmOff
         </div>
         <nav>
-          {/* ★ <a> タグを <Link> タグに変更 */}
           <Link 
             href="/app" 
             style={{ 
@@ -42,33 +44,19 @@ export default function FarmerLP() {
         </nav>
       </header>
 
-      {/* ヒーローセクション（農家様への強いメッセージ） */}
+      {/* ヒーローセクション */}
       <section style={{ textAlign: 'center', padding: '80px 20px', backgroundColor: '#E8F5E9' }}>
         <h1 style={{ fontSize: 36, marginBottom: 16, color: THEME.primary, fontWeight: 'bold' }}>
           農作業の一部を、安心して学生に任せませんか？
         </h1>
-        <p style={{ fontSize: 18, color: THEME.textSub, marginBottom: 32, maxWidth: 700, margin: '0 auto 32px auto', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 18, color: THEME.textSub, marginBottom: 0, maxWidth: 700, margin: '0 auto', lineHeight: 1.6 }}>
           FarmOffは、人手不足に悩む農家さんと、意欲ある大学生（代理管理者）をつなぐ管理ツールです。
           スケジュール共有、マニュアル化、現場の写真報告まで、遠隔でも作業をしっかり管理できます。
         </p>
-        <a 
-          href="#contact" 
-          style={{ 
-            background: THEME.accent, 
-            color: '#FFF', 
-            padding: '14px 32px', 
-            borderRadius: 30, 
-            textDecoration: 'none', 
-            fontWeight: 'bold', 
-            fontSize: 18,
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-          }}
-        >
-          まずは無料で試してみる
-        </a>
+        {/* 「まずは無料で試してみる」ボタンを削除 */}
       </section>
 
-      {/* フローチャートセクション（利用の流れ） */}
+      {/* フローチャートセクション */}
       <section style={{ padding: '60px 20px', maxWidth: 800, margin: '0 auto' }}>
         <h2 style={{ textAlign: 'center', fontSize: 28, marginBottom: 40 }}>導入から作業完了までの流れ</h2>
         
@@ -103,13 +91,29 @@ export default function FarmerLP() {
       <section style={{ padding: '60px 20px', backgroundColor: THEME.cardBg, borderTop: `1px solid ${THEME.border}`, borderBottom: `1px solid ${THEME.border}` }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <h2 style={{ textAlign: 'center', fontSize: 28, marginBottom: 40 }}>料金プラン</h2>
+          
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'center' }}>
             
             {/* 1回チケット */}
-            <div style={{ width: 300, padding: 32, border: `1px solid ${THEME.border}`, borderRadius: 12, textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
+            <div 
+              onClick={() => setSelectedPlan('onetime')}
+              style={{ 
+                width: 300, 
+                padding: 32, 
+                border: selectedPlan === 'onetime' ? `2px solid ${THEME.primary}` : `1px solid ${THEME.border}`, 
+                borderRadius: 12, 
+                textAlign: 'center', 
+                display: 'flex', 
+                flexDirection: 'column',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: selectedPlan === 'onetime' ? '0 4px 12px rgba(46,125,50,0.15)' : 'none',
+                transform: selectedPlan === 'onetime' ? 'translateY(-4px)' : 'none'
+              }}
+            >
               <h3 style={{ fontSize: 20, marginBottom: 12 }}>1回チケット</h3>
               <p style={{ color: THEME.textSub, marginBottom: 24, fontSize: 14 }}>指定の休日に単発で依頼したい方へ</p>
-              <div style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: THEME.textMain }}>
+              <div style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: selectedPlan === 'onetime' ? THEME.primary : THEME.textMain }}>
                 6,000円 <span style={{ fontSize: 14, fontWeight: 'normal', color: THEME.textSub }}>/ 1回</span>
               </div>
               <div style={{ textAlign: 'left', marginTop: 'auto' }}>
@@ -120,13 +124,29 @@ export default function FarmerLP() {
             </div>
 
             {/* 月額プラン */}
-            <div style={{ width: 300, padding: 32, border: `2px solid ${THEME.primary}`, borderRadius: 12, textAlign: 'center', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+            <div 
+              onClick={() => setSelectedPlan('monthly')}
+              style={{ 
+                width: 300, 
+                padding: 32, 
+                border: selectedPlan === 'monthly' ? `2px solid ${THEME.primary}` : `1px solid ${THEME.border}`, 
+                borderRadius: 12, 
+                textAlign: 'center', 
+                position: 'relative', 
+                display: 'flex', 
+                flexDirection: 'column',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: selectedPlan === 'monthly' ? '0 4px 12px rgba(46,125,50,0.15)' : 'none',
+                transform: selectedPlan === 'monthly' ? 'translateY(-4px)' : 'none'
+              }}
+            >
               <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: THEME.primary, color: '#FFF', padding: '4px 16px', borderRadius: 20, fontSize: 12, fontWeight: 'bold' }}>
                 おすすめ
               </div>
               <h3 style={{ fontSize: 20, marginBottom: 12 }}>月額プラン</h3>
               <p style={{ color: THEME.textSub, marginBottom: 24, fontSize: 14 }}>定期的な管理でお任せしたい方へ</p>
-              <div style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: THEME.primary }}>
+              <div style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: selectedPlan === 'monthly' ? THEME.primary : THEME.textMain }}>
                 40,000円 <span style={{ fontSize: 14, fontWeight: 'normal', color: THEME.textSub }}>/ 月</span>
               </div>
               <div style={{ textAlign: 'left', marginTop: 'auto' }}>
@@ -137,6 +157,28 @@ export default function FarmerLP() {
             </div>
 
           </div>
+
+          {/* 契約へ進むボタン */}
+          <div style={{ textAlign: 'center', marginTop: 48 }}>
+            <Link 
+              href="/app" // アカウント登録画面などへ遷移させる想定です
+              style={{ 
+                display: 'inline-block',
+                background: THEME.accent, 
+                color: '#FFF', 
+                padding: '16px 64px', 
+                borderRadius: 40, 
+                textDecoration: 'none', 
+                fontWeight: 'bold', 
+                fontSize: 20,
+                boxShadow: '0 4px 8px rgba(245,158,11,0.3)',
+                transition: 'background 0.2s'
+              }}
+            >
+              {selectedPlan === 'monthly' ? '月額プランで契約する' : '1回チケットを購入する'}
+            </Link>
+          </div>
+
         </div>
       </section>
 
@@ -158,7 +200,8 @@ export default function FarmerLP() {
           />
           <FaqItem 
             question="Q. どのような作業を任せられますか？" 
-            answer="A. 当社が提供するテンプレートに沿って、管理委託用のマニュアルを作成していただきます。基本的には合計で1時間程度の作業を上限としております。代行以外の農作業は、追加料金をいただきます。" 
+            // ★ 回答に文章を追加しました
+            answer="A. 水やりやビニールハウスの温度管理などです。当社が提供するテンプレートに沿って、管理委託用のマニュアルを作成していただきます。基本的には合計で1時間程度の作業を上限としております。代行以外の農作業は、追加料金をいただきます。" 
           />
         </div>
       </section>
