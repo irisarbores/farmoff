@@ -5,7 +5,7 @@ import FarmOffApp from '../../lib/FarmOffApp';
 import { supabase } from '../../lib/supabaseClient'; 
 
 export default function AppPage() {
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,11 +37,10 @@ export default function AppPage() {
   return <FarmOffApp session={session} />;
 }
 
-// 簡易的なログイン・新規登録フォーム
 function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(true); 
   const [message, setMessage] = useState('');
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -56,7 +55,7 @@ function LoginForm() {
       const { error: signUpError } = await supabase.auth.signUp({ email, password });
       error = signUpError;
       if (!signUpError) {
-        setMessage('確認メールを送信しました。');
+        setMessage('確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。');
         return;
       }
     }
@@ -70,14 +69,37 @@ function LoginForm() {
 
   return (
     <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <input type="email" placeholder="メールアドレス" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6 }} />
-      <input type="password" placeholder="パスワード" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6 }} />
-      <button type="submit" style={{ padding: 14, background: '#2E7D32', color: '#FFF', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold' }}>
+      <input
+        type="email"
+        placeholder="メールアドレス"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 16 }}
+      />
+      <input
+        type="password"
+        placeholder="パスワード"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+        style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 16 }}
+      />
+      <button 
+        type="submit" 
+        style={{ padding: 14, background: '#2E7D32', color: '#FFF', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}
+      >
         {isLogin ? 'ログイン' : '新規登録'}
       </button>
-      <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); }} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', textDecoration: 'underline' }}>
+      
+      <button 
+        type="button" 
+        onClick={() => { setIsLogin(!isLogin); setMessage(''); }} 
+        style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', textDecoration: 'underline' }}
+      >
         {isLogin ? 'アカウントをお持ちでない方は新規登録' : 'すでにアカウントをお持ちの方はログイン'}
       </button>
+
       {message && <p style={{ color: '#DC2626', fontSize: 14, textAlign: 'center' }}>{message}</p>}
     </form>
   );
