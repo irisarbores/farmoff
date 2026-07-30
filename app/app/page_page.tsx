@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import FarmOffApp from '../../lib/FarmOffApp'; // 実際のファイル名に合わせてください
-import { supabase } from '../../lib/supabaseClient'; // supabaseClientのパスに合わせてください
+import FarmOffApp from '../../lib/FarmOffApp'; // 階層が変わった場合はパスを調整
+import { supabase } from '../../lib/supabaseClient';
 
 export default function AppPage() {
   const [session, setSession] = useState(null);
