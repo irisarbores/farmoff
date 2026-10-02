@@ -158,6 +158,7 @@ export default function FarmOffApp({ session }) {
     }
   }, [activeFarmId]);
 
+  // 3. 全データの初期ロード ＋ 全機能のリアルタイム同期（INSERT / UPDATE / DELETE）
   useEffect(() => {
     if (!activeFarmId) return;
 
@@ -175,44 +176,59 @@ export default function FarmOffApp({ session }) {
     }
     loadAll();
 
-    const msgChannel = supabase
-      .channel(`messages-${activeFarmId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `farm_id=eq.${activeFarmId}` },
-        (payload) => setMessages((prev) => {
-          if (prev.some(m => m.id === payload.new.id)) return prev;
-          return [...prev, payload.new];
-        })
-      )
-      .subscribe();
+    // ⚡ 共通のヘルパー関数（追加・更新・削除のリアルタイム処理）
+    const handleRealtimeChange = (setter, payload, isUnshift = false) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+      setter((prev) => {
+        if (eventType === 'INSERT') {
+          if (prev.some((item) => item.id === newRow.id)) return prev;
+          return isUnshift ? [newRow, ...prev] : [...prev, newRow];
+        }
+        if (eventType === 'UPDATE') {
+          return prev.map((item) => (item.id === newRow.id ? newRow : item));
+        }
+        if (eventType === 'DELETE') {
+          return prev.filter((item) => item.id !== oldRow.id);
+        }
+        return prev;
+      });
+    };
 
-    const scheduleChannel = supabase
-      .channel(`schedules-${activeFarmId}`)
+    // 📡 各テーブルのリアルタイムチャンネル登録
+    const farmChannel = supabase
+      .channel(`farm-realtime-${activeFarmId}`)
+      // 1. 予定（schedules）
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'schedules', filter: `farm_id=eq.${activeFarmId}` },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setSchedules((prev) => {
-              if (prev.some(s => s.id === payload.new.id)) return prev;
-              return [...prev, payload.new];
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            setSchedules((prev) => prev.map((s) => (s.id === payload.new.id ? payload.new : s)));
-          } else if (payload.eventType === 'DELETE') {
-            setSchedules((prev) => prev.filter((s) => s.id !== payload.old.id));
-          }
-        }
+        (payload) => handleRealtimeChange(setSchedules, payload)
+      )
+      // 2. 報告（reports）
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reports', filter: `farm_id=eq.${activeFarmId}` },
+        (payload) => handleRealtimeChange(setReports, payload, true)
+      )
+      // 3. チャット（messages）
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `farm_id=eq.${activeFarmId}` },
+        (payload) => handleRealtimeChange(setMessages, payload)
+      )
+      // 4. マニュアル（manuals）
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'manuals', filter: `farm_id=eq.${activeFarmId}` },
+        (payload) => handleRealtimeChange(setManuals, payload)
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(msgChannel);
-      supabase.removeChannel(scheduleChannel);
+      supabase.removeChannel(farmChannel);
     };
   }, [activeFarmId]);
 
+  // ---- 予定 ----
   async function addSchedule() {
     const { data, error } = await supabase
       .from('schedules')
@@ -222,14 +238,11 @@ export default function FarmOffApp({ session }) {
       
     if (error) {
       console.error('予定の追加に失敗しました:', error.message);
-      alert('予定の追加に失敗しました。テーブルが存在しないか、権限がありません。');
+      alert('予定の追加に失敗しました。');
       return;
     }
     if (data) {
-      setSchedules((prev) => {
-        if (prev.some(s => s.id === data.id)) return prev;
-        return [...prev, data];
-      });
+      setSchedules((prev) => prev.some(s => s.id === data.id) ? prev : [...prev, data]);
     }
   }
   async function updateSchedule(id, fields) {
@@ -241,6 +254,7 @@ export default function FarmOffApp({ session }) {
     await supabase.from('schedules').delete().eq('id', id);
   }
 
+  // ---- 報告 ----
   async function submitReport(note, isOk, file) {
     let photoPath = null;
     if (file) {
@@ -261,23 +275,22 @@ export default function FarmOffApp({ session }) {
       .insert({ farm_id: activeFarmId, agent_id: userId, note, is_ok: isOk, photo_url: photoPath })
       .select()
       .single();
-    if (data) setReports((prev) => [data, ...prev]);
+    if (data) {
+      setReports((prev) => prev.some(r => r.id === data.id) ? prev : [data, ...prev]);
+    }
   }
 
   async function requestDeleteReport(id, reason) {
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, delete_requested: true, delete_reason: reason } : r)));
     await supabase.from('reports').update({ delete_requested: true, delete_reason: reason }).eq('id', id);
-    setReports((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, delete_requested: true, delete_reason: reason } : r))
-    );
   }
 
   async function approveReport(id, newStatus) {
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
     await supabase.from('reports').update({ status: newStatus }).eq('id', id);
-    setReports((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-    );
   }
 
+  // ---- チャット ----
   async function uploadFile(file, folder, allowPdf = false) {
     if (!file) return null;
     const check = validateImageOrPdfFile(file, allowPdf);
@@ -313,20 +326,20 @@ export default function FarmOffApp({ session }) {
     }
 
     if (data) {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === data.id)) return prev;
-        return [...prev, data];
-      });
+      setMessages((prev) => prev.some((m) => m.id === data.id) ? prev : [...prev, data]);
     }
   }
 
+  // ---- マニュアル ----
   async function addManual() {
     const { data } = await supabase
       .from('manuals')
       .insert({ farm_id: activeFarmId, title: '新しいマニュアル', body: '' })
       .select()
       .single();
-    if (data) setManuals((prev) => [...prev, data]);
+    if (data) {
+      setManuals((prev) => prev.some(m => m.id === data.id) ? prev : [...prev, data]);
+    }
   }
 
   async function updateManual(id, fields, file) {
@@ -335,13 +348,13 @@ export default function FarmOffApp({ session }) {
       const filePath = await uploadFile(file, 'manuals', true);
       if (filePath) updatedFields.image_url = filePath;
     }
-    await supabase.from('manuals').update(updatedFields).eq('id', id);
     setManuals((prev) => prev.map((m) => (m.id === id ? { ...m, ...updatedFields } : m)));
+    await supabase.from('manuals').update(updatedFields).eq('id', id);
   }
 
   async function deleteManual(id) {
-    await supabase.from('manuals').delete().eq('id', id);
     setManuals((prev) => prev.filter((m) => m.id !== id));
+    await supabase.from('manuals').delete().eq('id', id);
   }
   
   if (!profile) return (
