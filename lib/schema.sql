@@ -139,3 +139,20 @@ with check (bucket_id = 'report-photos' and auth.role() = 'authenticated');
 create policy "report-photos: public can view"
 on storage.objects for select
 using (bucket_id = 'report-photos');
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into public.profiles (id, role, display_name)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'role', 'farmer'),
+    coalesce(new.raw_user_meta_data->>'display_name', new.email)
+  );
+  return new;
+end $$;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+

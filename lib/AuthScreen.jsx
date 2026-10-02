@@ -1,4 +1,4 @@
-
+ 
 // lib/AuthScreen.jsx
 // 農家 / 代理管理者、両方が使う共通ログイン・新規登録画面
 import { useState } from 'react';
@@ -24,15 +24,18 @@ export default function AuthScreen({ onLoggedIn }) {
 
     if (mode === 'signup') {
       // 1. 認証ユーザーを作成
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      if (signUpError) {
-        setError(signUpError.message);
-        setLoading(false);
-        return;
-      }
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+if (signUpError) { setError(signUpError.message); setLoading(false); return; }
+
+// ★ Confirm email がONだと session が null → その旨を伝える
+if (!data.session) {
+  setError('確認メールを送信しました。メール内のリンクをタップしてから再度ログインしてください。');
+  setLoading(false);
+  return;
+}
+
+// session が張られていることを確認してから profiles にINSERT
+
 
       // 2. profilesテーブルに役割と表示名を保存
       const userId = data.user?.id;

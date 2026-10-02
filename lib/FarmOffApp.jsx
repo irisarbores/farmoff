@@ -275,18 +275,35 @@ export default function FarmOffApp({ session }) {
   }
 
   // ---- チャット送信 ----
-  async function sendMessage(body, file) {
-    let imagePath = null;
-    if (file) {
-      imagePath = await uploadFile(file, 'chat', false);
-    }
-    await supabase.from('messages').insert({
-      farm_id: activeFarmId,
-      sender_id: userId,
-      body: body || '',
-      image_url: imagePath,
+  // ---- チャット送信 ----
+async function sendMessage(body, file) {
+  let imagePath = null;
+  if (file) {
+    imagePath = await uploadFile(file, 'chat', false);
+  }
+  
+  const { data, error } = await supabase.from('messages').insert({
+    farm_id: activeFarmId,
+    sender_id: userId,
+    body: body || '',
+    image_url: imagePath,
+  }).select().single(); // ★ select().single() を追加して送信データを取得
+
+  if (error) {
+    console.error('メッセージ送信エラー:', error.message);
+    alert('メッセージの送信に失敗しました。');
+    return;
+  }
+
+  // ★ 送信成功時、リアルタイム受信を待たずに自分の画面に即時反映させる
+  if (data) {
+    setMessages((prev) => {
+      // 既にリアルタイムイベントで届いて重複するのを防ぐチェック
+      if (prev.some((m) => m.id === data.id)) return prev;
+      return [...prev, data];
     });
   }
+}
 
   // ---- マニュアル ----
   async function addManual() {
@@ -313,7 +330,13 @@ export default function FarmOffApp({ session }) {
     setManuals((prev) => prev.filter((m) => m.id !== id));
   }
   
-  if (!profile) return <p style={{ padding: 16, color: THEME.textMain }}>読み込み中…</p>;
+  if (!profile) return (
+  <div style={{ padding: 16 }}>
+    <p>プロフィールが見つかりません。再度ログインするか、運営にお問い合わせください。</p>
+    <button onClick={() => supabase.auth.signOut()}>ログアウト</button>
+  </div>
+);
+
 
   return (
     <div style={{ maxWidth: 420, margin: '0 auto', fontFamily: 'sans-serif', backgroundColor: '#FFFFFF', minHeight: '100vh', color: THEME.textMain }}>
