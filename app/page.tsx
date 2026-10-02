@@ -43,12 +43,12 @@ export default function FarmerLP() {
 
       {/* ヒーローセクション */}
       <section style={{ textAlign: 'center', padding: '80px 20px', backgroundColor: '#E8F5E9' }}>
-        <h1 style={{ fontSize: 36, marginBottom: 16, color: THEME.primary, fontWeight: 'bold' }}>
-          農作業の一部を、安心して学生に任せませんか？
+        <h1 style={{ fontSize: 32, marginBottom: 16, color: THEME.primary, fontWeight: 'bold', lineHeight: 1.4 }}>
+          土日の栽培管理を、安心して学生に任せませんか？
         </h1>
-        <p style={{ fontSize: 18, color: THEME.textSub, marginBottom: 0, maxWidth: 700, margin: '0 auto', lineHeight: 1.6 }}>
-          FarmOffは、人手不足に悩む農家さんと、意欲ある大学生（代理管理者）をつなぐ管理ツールです。
-          スケジュール共有、マニュアル化、現場の写真報告まで、遠隔でも作業をしっかり管理できます。
+        <p style={{ fontSize: 17, color: THEME.textSub, marginBottom: 0, maxWidth: 720, margin: '0 auto', lineHeight: 1.7 }}>
+          FarmOffは、農家さんに安心できる休日を提供するサービスです。
+          休日に大学生が畑へ伺い、農家様自身が作成したマニュアル(フォーマットは提供します)に基づいて日々の栽培管理を行います。作業の状況はリアルタイムで報告されるため、安心して栽培管理を任せられます。
         </p>
       </section>
 
@@ -60,19 +60,19 @@ export default function FarmerLP() {
           <Step 
             number="1" 
             title="予定とマニュアルを登録" 
-            description="FarmOffのアプリ上で、任せたい作業の予定日と、簡単な手順（PDFや写真）を登録します。" 
+            description="FarmOffのアプリ上で、任せたい作業の予定日と、作成いただいた栽培管理マニュアルを登録します。" 
           />
           <Arrow />
           <Step 
             number="2" 
-            title="学生（代理管理者）が現場へ" 
-            description="大学でマッチングした学生が、アプリの予定とマニュアルを確認して農園へ向かいます。" 
+            title="大学生が畑へ" 
+            description="大学生が、アプリの予定とマニュアルを確認して畑へ向かいます。" 
           />
           <Arrow />
           <Step 
             number="3" 
             title="写真付きで作業報告を受信" 
-            description="学生は作業完了後、スマホから写真を添付して報告。病害虫などの異常があればアラートでお知らせします。" 
+            description="大学生は作業完了後、スマホから写真を添付して報告。病害虫などの異常があればアラートでお知らせします。" 
           />
           <Arrow />
           <Step 
@@ -89,8 +89,6 @@ export default function FarmerLP() {
           <h2 style={{ textAlign: 'center', fontSize: 28, marginBottom: 40 }}>料金プラン</h2>
           
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            
-            {/* 月額プラン（3.2万円に変更） */}
             <div 
               style={{ 
                 width: 320, 
@@ -114,14 +112,12 @@ export default function FarmerLP() {
               </div>
               <div style={{ textAlign: 'left', marginTop: 'auto' }}>
                 <p style={{ fontSize: 14, color: THEME.textMain, lineHeight: 1.6, padding: '12px', backgroundColor: '#E8F5E9', borderRadius: 8 }}>
-                  毎週土日（基本的に月8回）代行管理者が伺います。
+                  毎週土日（基本的に月8回）大学生が畑へ伺います。
                 </p>
               </div>
             </div>
-
           </div>
 
-          {/* 契約へ進むボタン */}
           <div style={{ textAlign: 'center', marginTop: 48 }}>
             <Link 
               href="/app" 
@@ -134,8 +130,7 @@ export default function FarmerLP() {
                 textDecoration: 'none', 
                 fontWeight: 'bold', 
                 fontSize: 20,
-                boxShadow: '0 4px 8px rgba(245,158,11,0.3)',
-                transition: 'background 0.2s'
+                boxShadow: '0 4px 8px rgba(245,158,11,0.3)'
               }}
             >
               月額プランで契約する

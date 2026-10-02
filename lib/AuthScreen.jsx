@@ -1,15 +1,9 @@
- 
 // lib/AuthScreen.jsx
-// 農家 / 代理管理者、両方が使う共通ログイン・新規登録画面
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
 
 export default function AuthScreen({ onLoggedIn }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  // ★ role はUIでは 'farmer'/'agent' の2択のみだが、これはあくまで見た目の制限。
-  //   実際の防御は security_hardening.sql の profiles_insert_self ポリシーで
-  //   role in ('farmer','agent') 以外のINSERTをDB側で拒否している。
-  //   （ここだけ直しても、API直叩きでadmin登録されるのは防げないため）
+  const [mode, setMode] = useState('login');
   const [role, setRole] = useState('farmer'); // 'farmer' | 'agent'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,21 +17,15 @@ export default function AuthScreen({ onLoggedIn }) {
     setLoading(true);
 
     if (mode === 'signup') {
-      // 1. 認証ユーザーを作成
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-if (signUpError) { setError(signUpError.message); setLoading(false); return; }
+      if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
-// ★ Confirm email がONだと session が null → その旨を伝える
-if (!data.session) {
-  setError('確認メールを送信しました。メール内のリンクをタップしてから再度ログインしてください。');
-  setLoading(false);
-  return;
-}
+      if (!data.session) {
+        setError('確認メールを送信しました。メール内のリンクをタップしてから再度ログインしてください。');
+        setLoading(false);
+        return;
+      }
 
-// session が張られていることを確認してから profiles にINSERT
-
-
-      // 2. profilesテーブルに役割と表示名を保存
       const userId = data.user?.id;
       if (userId) {
         const { error: profileError } = await supabase.from('profiles').insert({
@@ -97,7 +85,7 @@ if (!data.session) {
                   border: role === 'agent' ? '2px solid #333' : '1px solid #ccc',
                 }}
               >
-                代理管理者として登録
+                大学生として登録
               </button>
             </div>
             <input

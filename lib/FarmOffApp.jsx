@@ -28,7 +28,6 @@ function validateImageOrPdfFile(file, allowPdf = false) {
   return { ok: true };
 }
 
-// Privateバケット用ヘルパー関数：パスからSigned URL（有効期限付きURL）を取得
 async function getSignedImageUrl(pathOrUrl, expiresInSeconds = 3600) {
   if (!pathOrUrl) return null;
 
@@ -48,7 +47,6 @@ async function getSignedImageUrl(pathOrUrl, expiresInSeconds = 3600) {
   return data.signedUrl;
 }
 
-// 🖼️ 渡されたファイルパス（画像またはPDF）から動的に Signed URL を生成して表示するコンポーネント
 function PrivateMedia({ path, alt, style }) {
   const [signedUrl, setSignedUrl] = useState(null);
 
@@ -66,7 +64,6 @@ function PrivateMedia({ path, alt, style }) {
 
   if (!signedUrl) return null;
 
-  // PDFファイルの場合は閲覧・ダウンロード用リンクを表示
   const isPdf = path.toLowerCase().endsWith('.pdf') || path.includes('application/pdf');
 
   if (isPdf) {
@@ -87,7 +84,6 @@ function PrivateMedia({ path, alt, style }) {
   return <img src={signedUrl} alt={alt} style={style} loading="lazy" />;
 }
 
-// テーマカラー設定（明るい白ベース ＋ 緑アクセント）
 const THEME = {
   primary: '#2E7D32',
   primaryHover: '#1B5E20',
@@ -112,7 +108,6 @@ export default function FarmOffApp({ session }) {
 
   const userId = session.user.id;
 
-  // 1. プロフィール取得
   useEffect(() => {
     supabase
       .from('profiles')
@@ -122,7 +117,6 @@ export default function FarmOffApp({ session }) {
       .then(({ data }) => setProfile(data));
   }, [userId]);
 
-  // 2. 関係する農園一覧の取得
   useEffect(() => {
     if (!profile) return;
 
@@ -134,7 +128,7 @@ export default function FarmOffApp({ session }) {
         if (data && data.length === 0) {
           const { data: created } = await supabase
             .from('farms')
-            .insert({ farmer_id: userId, name: `${profile.display_name}の農園` })
+            .insert({ farmer_id: userId, name: `${profile.display_name}の畑` })
             .select()
             .single();
           setFarms(created ? [created] : []);
@@ -164,7 +158,6 @@ export default function FarmOffApp({ session }) {
     }
   }, [activeFarmId]);
 
-  // 3. データの読み込み ＋ チャット・予定のリアルタイム購読
   useEffect(() => {
     if (!activeFarmId) return;
 
@@ -182,7 +175,6 @@ export default function FarmOffApp({ session }) {
     }
     loadAll();
 
-    // チャットのリアルタイム購読
     const msgChannel = supabase
       .channel(`messages-${activeFarmId}`)
       .on(
@@ -195,7 +187,6 @@ export default function FarmOffApp({ session }) {
       )
       .subscribe();
 
-    // ★ 予定のリアルタイム購読（農家が追加・変更・削除した予定を即座に代行管理者の画面へ同期）
     const scheduleChannel = supabase
       .channel(`schedules-${activeFarmId}`)
       .on(
@@ -222,7 +213,6 @@ export default function FarmOffApp({ session }) {
     };
   }, [activeFarmId]);
 
-  // ---- 予定 ----
   async function addSchedule() {
     const { data, error } = await supabase
       .from('schedules')
@@ -235,7 +225,6 @@ export default function FarmOffApp({ session }) {
       alert('予定の追加に失敗しました。テーブルが存在しないか、権限がありません。');
       return;
     }
-    // 無条件・即時反映
     if (data) {
       setSchedules((prev) => {
         if (prev.some(s => s.id === data.id)) return prev;
@@ -252,7 +241,6 @@ export default function FarmOffApp({ session }) {
     await supabase.from('schedules').delete().eq('id', id);
   }
 
-  // ---- 報告の送信 ----
   async function submitReport(note, isOk, file) {
     let photoPath = null;
     if (file) {
@@ -290,7 +278,6 @@ export default function FarmOffApp({ session }) {
     );
   }
 
-  // ---- 共通アップロード（マニュアル用はPDF許可） ----
   async function uploadFile(file, folder, allowPdf = false) {
     if (!file) return null;
     const check = validateImageOrPdfFile(file, allowPdf);
@@ -307,7 +294,6 @@ export default function FarmOffApp({ session }) {
     return path;
   }
 
-  // ---- チャット送信 ----
   async function sendMessage(body, file) {
     let imagePath = null;
     if (file) {
@@ -334,7 +320,6 @@ export default function FarmOffApp({ session }) {
     }
   }
 
-  // ---- マニュアル ----
   async function addManual() {
     const { data } = await supabase
       .from('manuals')
@@ -347,7 +332,7 @@ export default function FarmOffApp({ session }) {
   async function updateManual(id, fields, file) {
     let updatedFields = { ...fields };
     if (file) {
-      const filePath = await uploadFile(file, 'manuals', true); // PDF許可
+      const filePath = await uploadFile(file, 'manuals', true);
       if (filePath) updatedFields.image_url = filePath;
     }
     await supabase.from('manuals').update(updatedFields).eq('id', id);
@@ -379,7 +364,7 @@ export default function FarmOffApp({ session }) {
       ) : (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#FAFAFA', borderBottom: `1px solid ${THEME.border}` }}>
-            <strong>{profile.display_name}さん（{profile.role === 'farmer' ? '農家' : '代理管理者'}）</strong>
+            <strong>{profile.display_name}さん（{profile.role === 'farmer' ? '農家' : '大学生'}）</strong>
             <button onClick={() => supabase.auth.signOut()} style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 13 }}>ログアウト</button>
           </div>
 
@@ -393,7 +378,6 @@ export default function FarmOffApp({ session }) {
             </div>
           )}
 
-          {/* ★ タブ一覧から「報酬 (payout)」を完全に削除（代行者・農家の双方で非表示） */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${THEME.border}`, overflowX: 'auto', background: '#FFFFFF' }}>
             {['schedule', 'report', 'chat', 'manual', 'invite', 'recurring'].map((t) => (
               <button

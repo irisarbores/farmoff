@@ -1,8 +1,6 @@
 'use client';
 
 // lib/InviteTab.jsx
-// 農家: 招待コードを発行する
-// 代行者: 招待コードを入力して農園に参加する
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -19,7 +17,7 @@ function IssueInvite({ farmId }) {
   const [error, setError] = useState('');
 
   function generateCode() {
-    return String(Math.floor(100000 + Math.random() * 900000)); // 6桁
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   async function handleIssue() {
@@ -44,7 +42,7 @@ function IssueInvite({ farmId }) {
   return (
     <div style={{ padding: 16 }}>
       <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
-        代行者に伝える招待コードを発行します（発行から30分間だけ有効です）。
+        大学生に伝える招待コードを発行します（発行から30分間だけ有効です）。
       </p>
       <button onClick={handleIssue} disabled={loading}>
         {loading ? '発行中…' : '招待コードを発行する'}
@@ -52,7 +50,7 @@ function IssueInvite({ farmId }) {
 
       {code && (
         <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, color: '#666' }}>このコードを代行者に伝えてください</div>
+          <div style={{ fontSize: 12, color: '#666' }}>このコードを大学生に伝えてください</div>
           <div style={{ fontSize: 32, fontWeight: 'bold', letterSpacing: 4, marginTop: 6 }}>{code}</div>
           <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>30分間有効</div>
         </div>
@@ -84,7 +82,7 @@ function RedeemInvite({ onJoined }) {
       );
     } else {
       setSuccess(true);
-      onJoined?.(data); // data = farm_id
+      onJoined?.(data);
     }
     setLoading(false);
   }
