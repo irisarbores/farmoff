@@ -5,7 +5,6 @@ import { supabase } from './supabaseClient';
 
 import InviteTab from './InviteTab';
 import RecurringTab from './RecurringTab';
-import PayoutTab from './PayoutTab';
 
 // アップロードファイルの検証（画像 ＋ PDF に対応）
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -165,7 +164,7 @@ export default function FarmOffApp({ session }) {
     }
   }, [activeFarmId]);
 
-  // 3. データの読み込み ＋ チャットのリアルタイム購読
+  // 3. データの読み込み ＋ チャット・予定のリアルタイム購読
   useEffect(() => {
     if (!activeFarmId) return;
 
@@ -183,16 +182,44 @@ export default function FarmOffApp({ session }) {
     }
     loadAll();
 
-    const channel = supabase
+    // チャットのリアルタイム購読
+    const msgChannel = supabase
       .channel(`messages-${activeFarmId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `farm_id=eq.${activeFarmId}` },
-        (payload) => setMessages((prev) => [...prev, payload.new])
+        (payload) => setMessages((prev) => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          return [...prev, payload.new];
+        })
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    // ★ 予定のリアルタイム購読（農家が追加・変更・削除した予定を即座に代行管理者の画面へ同期）
+    const scheduleChannel = supabase
+      .channel(`schedules-${activeFarmId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'schedules', filter: `farm_id=eq.${activeFarmId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setSchedules((prev) => {
+              if (prev.some(s => s.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setSchedules((prev) => prev.map((s) => (s.id === payload.new.id ? payload.new : s)));
+          } else if (payload.eventType === 'DELETE') {
+            setSchedules((prev) => prev.filter((s) => s.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(msgChannel);
+      supabase.removeChannel(scheduleChannel);
+    };
   }, [activeFarmId]);
 
   // ---- 予定 ----
@@ -208,15 +235,21 @@ export default function FarmOffApp({ session }) {
       alert('予定の追加に失敗しました。テーブルが存在しないか、権限がありません。');
       return;
     }
-    if (data) setSchedules((prev) => [...prev, data]);
+    // 無条件・即時反映
+    if (data) {
+      setSchedules((prev) => {
+        if (prev.some(s => s.id === data.id)) return prev;
+        return [...prev, data];
+      });
+    }
   }
   async function updateSchedule(id, fields) {
-    await supabase.from('schedules').update(fields).eq('id', id);
     setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, ...fields } : s)));
+    await supabase.from('schedules').update(fields).eq('id', id);
   }
   async function deleteSchedule(id) {
-    await supabase.from('schedules').delete().eq('id', id);
     setSchedules((prev) => prev.filter((s) => s.id !== id));
+    await supabase.from('schedules').delete().eq('id', id);
   }
 
   // ---- 報告の送信 ----
@@ -275,35 +308,31 @@ export default function FarmOffApp({ session }) {
   }
 
   // ---- チャット送信 ----
-  // ---- チャット送信 ----
-async function sendMessage(body, file) {
-  let imagePath = null;
-  if (file) {
-    imagePath = await uploadFile(file, 'chat', false);
-  }
-  
-  const { data, error } = await supabase.from('messages').insert({
-    farm_id: activeFarmId,
-    sender_id: userId,
-    body: body || '',
-    image_url: imagePath,
-  }).select().single(); // ★ select().single() を追加して送信データを取得
+  async function sendMessage(body, file) {
+    let imagePath = null;
+    if (file) {
+      imagePath = await uploadFile(file, 'chat', false);
+    }
+    const { data, error } = await supabase.from('messages').insert({
+      farm_id: activeFarmId,
+      sender_id: userId,
+      body: body || '',
+      image_url: imagePath,
+    }).select().single();
 
-  if (error) {
-    console.error('メッセージ送信エラー:', error.message);
-    alert('メッセージの送信に失敗しました。');
-    return;
-  }
+    if (error) {
+      console.error('メッセージ送信エラー:', error.message);
+      alert('メッセージの送信に失敗しました。');
+      return;
+    }
 
-  // ★ 送信成功時、リアルタイム受信を待たずに自分の画面に即時反映させる
-  if (data) {
-    setMessages((prev) => {
-      // 既にリアルタイムイベントで届いて重複するのを防ぐチェック
-      if (prev.some((m) => m.id === data.id)) return prev;
-      return [...prev, data];
-    });
+    if (data) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === data.id)) return prev;
+        return [...prev, data];
+      });
+    }
   }
-}
 
   // ---- マニュアル ----
   async function addManual() {
@@ -331,12 +360,11 @@ async function sendMessage(body, file) {
   }
   
   if (!profile) return (
-  <div style={{ padding: 16 }}>
-    <p>プロフィールが見つかりません。再度ログインするか、運営にお問い合わせください。</p>
-    <button onClick={() => supabase.auth.signOut()}>ログアウト</button>
-  </div>
-);
-
+    <div style={{ padding: 16 }}>
+      <p>プロフィールが見つかりません。再度ログインするか、運営にお問い合わせください。</p>
+      <button onClick={() => supabase.auth.signOut()}>ログアウト</button>
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 420, margin: '0 auto', fontFamily: 'sans-serif', backgroundColor: '#FFFFFF', minHeight: '100vh', color: THEME.textMain }}>
@@ -365,10 +393,9 @@ async function sendMessage(body, file) {
             </div>
           )}
 
+          {/* ★ タブ一覧から「報酬 (payout)」を完全に削除（代行者・農家の双方で非表示） */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${THEME.border}`, overflowX: 'auto', background: '#FFFFFF' }}>
-            {['schedule', 'report', 'chat', 'manual', 'invite', 'recurring', 'payout']
-              .filter((t) => t !== 'payout' || profile.role !== 'farmer')
-              .map((t) => (
+            {['schedule', 'report', 'chat', 'manual', 'invite', 'recurring'].map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -392,8 +419,7 @@ async function sendMessage(body, file) {
                   chat: 'チャット',
                   manual: 'マニュアル',
                   invite: '招待',
-                  recurring: '繰り返し',
-                  payout: '報酬'
+                  recurring: '繰り返し'
                 }[t]}
               </button>
             ))}
@@ -432,9 +458,6 @@ async function sendMessage(body, file) {
               }} 
             />
           )}
-          {tab === 'payout' && profile.role !== 'farmer' && (
-            <PayoutTab profile={profile} />
-          )}
           {tab === 'manual' && (
             <ManualTab
               profile={profile}
@@ -465,6 +488,12 @@ function ScheduleItem({ schedule, onUpdate, onDelete }) {
   const [task, setTask] = useState(schedule.task ?? '');
   const [visitDate, setVisitDate] = useState(schedule.visit_date ?? '');
   const [visitTime, setVisitTime] = useState(schedule.visit_time ?? '09:00');
+
+  useEffect(() => {
+    setTask(schedule.task ?? '');
+    setVisitDate(schedule.visit_date ?? '');
+    setVisitTime(schedule.visit_time ?? '09:00');
+  }, [schedule]);
 
   return (
     <div style={{ border: `1px solid ${THEME.border}`, padding: 10, marginTop: 8, borderRadius: 6, background: THEME.cardBg }}>
@@ -809,7 +838,6 @@ function ManualItem({ manual, onUpdate, onDelete, profile }) {
         style={{ width: '100%', marginTop: 6, padding: 6, boxSizing: 'border-box', borderRadius: 4, border: `1px solid ${THEME.border}`, color: THEME.textMain }}
       />
 
-      {/* 📄 画像・PDF の安全な参照表示 */}
       {manual.image_url && (
         <PrivateMedia 
           path={manual.image_url} 
